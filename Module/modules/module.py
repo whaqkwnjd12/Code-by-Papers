@@ -11,30 +11,38 @@ class SMC_Module(nn.Module):
         self.make_module()
     
     def forward(self, x):
+        """
+        	return full-frame, pose, face, both-hands
+            
+            
+            full-frame	: T X 512
+            pose 		: T X 256
+            face		: T X 256
+            both-hands	: T X 512
+        """
         fu = self.model[0]
         po = self.model[1]
         ha = self.model[2]
         fa = self.model[3]
 
-        tmp = []
+        output = []
         
         x = fu[0](x)
         crop_src = x
         crop_H, crop_W = x.size()[-2:]
         x = fu[1](x)
         soft_argmax_src = x
-        tmp.append(fu[2](x))
+        output.append(fu[2](x))
 
         r, c, B= po[0](x)
         x = torch.cat((r, c), dim=-1).view(B, -1)
                                                           
-        tmp.append(po[1](x))
+        output.append(po[1](x))
         self.Face_src, L_Hand_src, R_Hand_src = po[2](crop_src, r, c, crop_H-1, crop_W-1)
         
-        tmp.append(fa(self.Face_src))
-        tmp.append(torch.cat((ha(L_Hand_src), ha(R_Hand_src)), dim=-1))
+        output.append(fa(self.Face_src))
+        output.append(torch.cat((ha(L_Hand_src), ha(R_Hand_src)), dim=-1))
         
-        output = torch.cat(tmp, dim=1)
         
         return output
 
