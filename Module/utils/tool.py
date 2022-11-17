@@ -38,41 +38,40 @@ class Soft_Argmax(nn.Module):
 class cropping_patch(nn.Module):
     def __init__(self):
         super(cropping_patch, self).__init__()
-
-    def forward(self, src, row, col, Height, Width):
+        self.zero_padd_size = 24
+        self.zero_padding = nn.ZeroPad2d(self.zero_padd_size)
+    def forward(self, src, coord):
         """
-        src : T, C, H, W
-        row : T, 7
-        [0] : nose(Face)       16X16
-        [1] : R-Wrist(R-Hand)  24X24
-        [2] : L-Wrist(L-Hand)  24X24
+        src    : T x C x H x W
+        coord  : T x 7 x 2
+        return:
+            [0] : nose(Face)       16X16
+            [1] : R-Wrist(R-Hand)  24X24
+            [2] : L-Wrist(L-Hand)  24X24
         """
+        H, W = src.size()[-2:]
+        H -= 1
+        W -= 1
+        
         face_src, R_src, L_src = [], [], []
-        zero = nn.ZeroPad2d(20)
-        row = (row*Height).int()
-        row += 20
-        col = (col*Width).int()
-        col += 20
-        src = zero(src)
-        for t, s in enumerate(src):
-            face = s[:, row[t, 0] - 8 : row[t, 0] + 8, col[t, 0] - 8: col[t, 0] + 8]
-            R = s[:, row[t, 1] - 12 : row[t, 1] + 12, col[t, 1] - 12: col[t, 1] + 12]
-            L = s[:, row[t, 2] - 12 : row[t, 2] + 12, col[t, 2] - 12: col[t, 2] + 12]
+        row, col = src[:, :, 0], src[:, :, 1]
+        row = (row*H).int()
+        row += self.zero_padd_size
+        col = (col*W).int()
+        col += self.zero_padd_size
+        src = self.zero_padding(src)
+        for each_src, each_row, each_col in zip(src, row, col):
+            face = each_src[:, each_row[0] - 8 : each_row[0] + 8, each_col[0] - 8: each_col[0] + 8]
+            R = s[:, each_row[1] - 12 : each_row[1] + 12, each_col[1] - 12: each_col[1] + 12]
+            L = s[:, each_row[2] - 12 : each_row[2] + 12, each_col[2] - 12: each_col[2] + 12]
             face_src += [face]
             R_src += [R]
             L_src += [L]
-            if R.size() != torch.randn(256, 24, 24).size():
-                print(t, 'R:',R.size())
-                print(row[t, 1]," or ",col[t, 1])
-            elif L.size() != torch.randn(256, 24, 24).size():
-                print(t, 'L:',L.size())
-                print(row[t, 2]," or ",col[t, 2])
-            elif face.size() != torch.randn(256, 16, 16).size():
-                print(t, 'Face:',face.size())
-                print(row[t, 0]," or ",col[t, 0])
-        face_src = torch.stack(face_src)
-        R_src = torch.stack(R_src)
-        L_src = torch.stack(L_src)
+                
+                
+        face_src = torch.stack(face_src, dim = 0)
+        R_src = torch.stack(R_src, dim = 0)
+        L_src = torch.stack(L_src, dim = 0)
         return face_src, L_src, R_src
     
 
