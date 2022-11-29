@@ -6,26 +6,13 @@ from layers import get_conv
 
 class SMC_Module(nn.Module):
 
-    def __init__(self, kwargs):
+    def __init__(self, paper = True):
         super(SMC_Module, self).__init__()
-        self.make_module()
         
-        if kwargs['paper_code']:
+        if paper:
             self.make_module()
         else:
-            self.base_conv1 = get_layer(kwargs["base_conv1"])
-            self.base_conv1 = get_layer(kwargs["base_conv2"])
-            self.base_conv1 = get_layer(kwargs["base_conv3"])
-            
-            self.fase_conv = get_layer(kwargs["Face_conv"])
-            self.hands_conv = get_layer(kwargs["Hand_conv"])
-            
-            self.de_conv = get_layer(kwargs["De_conv"])
-            self.soft_argmax = Soft_Argmax()
-            
-            self.fc_layer = get_layer(kwargs["Affine"])
-            
-            self.cropping_layer = cropping_patch()
+            self.make_other_module()
             
             
     def forward(self, x):
@@ -49,37 +36,25 @@ class SMC_Module(nn.Module):
         x = self.base_conv2(x)
         
         # pose coordinate values
-        pose_coord = self.soft_argmax(self.de_conv(x))
+        pose_coord = self.de_conv_soft_argmax(x)
         
         # Full-Frame cue
         full_frame = self.base_conv3(x)
         # Pose cue
-        pose_cue = self.fc_layer(pose_coord)
+        pose = self.fc_layer(pose_coord)
         
         # cropping process
         face_src, l_hand_src, r_hand_src = self.cropping_layer(crop_src, pose_coord)
-        
-        
+        l_hand = self.hands(l_hand_src)
+        r_hand = self.hands(r_hand_src)
+        face = self.face(face_src)
+        output = [face, torch.cat([l_hand, r_hand], dim = 0), full_frame, pose]
+		
         return output
     
-    def make_other_type(kwargs):
-        self.base_conv1 = get_layer(kwargs["base_conv1"])
-        self.base_conv1 = get_layer(kwargs["base_conv2"])
-        self.base_conv1 = get_layer(kwargs["base_conv3"])
-        
-        self.fase_conv = get_layer(kwargs["Face_conv"])
-        
-        self.hands_conv = get_layer(kwargs["Hand_conv"])
-        
-        self.de_conv = get_layer(kwargs["De_conv"])
-        self.soft_argmax = Soft_Argmax()
-            
-        self.fc_layer = get_layer(kwargs["Affine"])
-
-        self.cropping_layer = cropping_patch()
-        
-        self.gap = nn.Sequential(nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())
-        
+    def make_other_module(self):
+        asd = 1
+    
     def make_module(self):
         """
             it makes modules used in SMC module.
@@ -92,32 +67,26 @@ class SMC_Module(nn.Module):
         # last 9-th convolutional layer is added
         _9th_layer = [nn.Conv2d(512,512, kernel_size=(3, 3)), nn.ReLU(inplace=True)]
         # Full-Frame cues are added.
-        cues["Full Frame"] = nn.ModuleList([
-            # Conv 1-4
-            nn.Sequential(*vgg11.features[:11]),
-            # Conv 5-7
-            nn.Sequential(*vgg11.features[11:18]),
-            # Conv 8-9
-            nn.Sequential(*vgg11.features[18:], *_9th_layer, nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())])
         
+        self.base_conv1 = nn.Sequential(*vgg11.features[:11])
+        self.base_conv2 = nn.Sequential(*vgg11.features[11:18])
+        self.base_conv3 = nn.Sequential(*vgg11.features[18:], *_9th_layer, nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())
         
-        cues["Pose"] = nn.ModuleList([
-            # DeConv-Soft_Argmax
-                                     nn.Sequential(nn.ConvTranspose2d(512, 256, kernel_size=(4, 4), stride=(2, 2), padding=1), nn.ReLU(inplace=True),
+        self.de_conv_soft_argmax = nn.Sequential(nn.ConvTranspose2d(512, 256, kernel_size=(4, 4), stride=(2, 2), padding=1), nn.ReLU(inplace=True),
                                       nn.ConvTranspose2d(256, 7, kernel_size=(4, 4), stride=(2, 2), padding=1), nn.ReLU(inplace=True),
-                                      Soft_Argmax()),
-            # extra FC
-                                     nn.Sequential(nn.Linear(14, 128), nn.ReLU(inplace=True),
-                                      nn.Linear(128, 256), nn.ReLU(inplace=True)),
-            # cropping
-                                     cropping_patch()])
-        
+                                      Soft_Argmax())
+        self.fc_layer = nn.Sequential(nn.Linear(14, 128), nn.ReLU(inplace=True), nn.Linear(128, 256), nn.ReLU(inplace=True))
+        self.cropping_layer = cropping_patch()
+		
+		
+		
+		
         # weight sharing for each hands
-        cues["Both Hand"] = nn.Sequential(nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
+        self.hands = nn.Sequential(nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())
     
-        cues["Face"] = nn.Sequential(nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
+        self.face = nn.Sequential(nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())
 
