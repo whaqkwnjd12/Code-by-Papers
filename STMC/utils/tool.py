@@ -32,7 +32,7 @@ class Soft_Argmax(nn.Module):
         col_coord = torch.sum(col_sum * coord, dim=-1)
         
 
-        return (row_coord, col_coord, B)
+        return torch.cat([row_coord, col_coord], dim=-1)
     
     
 class cropping_patch(nn.Module):
@@ -40,10 +40,11 @@ class cropping_patch(nn.Module):
         super(cropping_patch, self).__init__()
         self.zero_padd_size = 24
         self.zero_padding = nn.ZeroPad2d(self.zero_padd_size)
+        
     def forward(self, src, coord):
         """
         src    : T x C x H x W
-        coord  : T x 7 x 2
+        coord  : T x 14 (7 + 7)
         return:
             [0] : nose(Face)       16X16
             [1] : R-Wrist(R-Hand)  24X24
@@ -54,7 +55,7 @@ class cropping_patch(nn.Module):
         W -= 1
         
         face_src, R_src, L_src = [], [], []
-        row, col = src[:, :, 0], src[:, :, 1]
+        row, col = coord[:, :7], coord[:, 7:]
         row = (row*H).int()
         row += self.zero_padd_size
         col = (col*W).int()

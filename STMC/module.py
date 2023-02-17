@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 from torchvision import models
 from utils.tool import Soft_Argmax, cropping_patch, Squeeze
-from layers import get_conv
 
 class SMC_Module(nn.Module):
 
@@ -44,8 +43,6 @@ class SMC_Module(nn.Module):
         self.face = nn.Sequential(nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.Conv2d(256, 256, kernel_size=(3, 3), padding=(1, 1)), nn.ReLU(inplace=True),
                                            nn.AdaptiveAvgPool2d(output_size=(1, 1)), Squeeze())
-        # 
-        self.model = nn.ModuleList([cues["Full Frame"], cues["Pose"], cues["Face"], cues["Both Hand"]])
             
             
     def forward(self, x):
@@ -90,7 +87,7 @@ class SMC_Module(nn.Module):
         face = self.face(face_src)
         
         
-        output = [face, torch.cat([l_hand, r_hand], dim = 0), full_frame, pose]
+        output = [face, torch.cat([l_hand, r_hand], dim = -1), full_frame, pose]
 		
         return output
 
@@ -99,14 +96,12 @@ class SMC_Module(nn.Module):
 class Inter_Cue_path(nn.Module):
     
     def __init__(self, in_channel, out_channel, kernel_size=5, padding=2, stride=1):
+        super(Inter_Cue_path, self).__init__()
         
-        self.temporal_conv = nn.Conv1d(in_channel=in_channel,
-                                       out_channel=out_channel//2,
-                                       kernel_size=kernel_size,
-                                       padding=padding,
-                                       stride=stride)
+        self.temporal_conv = nn.Conv1d(in_channel, out_channel//2,
+                                       kernel_size=kernel_size, padding=padding, stride=stride)
         
-        self.relu = nn.ReLU(inpalce=True)
+        self.relu = nn.ReLU(inplace=True)
         
     def forward(self, x, intra_cue):
         """
@@ -138,11 +133,16 @@ class Intra_Cue_path(nn.Module):
                 out_channels: list()
                     list of channels of each output from each feature cues
         """
+        super(Intra_Cue_path, self).__init__()
         
-        self.face        = nn.Sequential(nn.Conv1d(in_channels[0], out_channels[0], kernel_size=kernel_size, padding=padding, stride=stride), nn.ReLU(inplace=True))
-        self.both_hands  = nn.Sequential(nn.Conv1d(in_channels[1], out_channels[1], kernel_size=kernel_size, padding=padding, stride=stride), nn.ReLU(inplace=True)) 
-        self.full_frame  = nn.Sequential(nn.Conv1d(in_channels[2], out_channels[2], kernel_size=kernel_size, padding=padding, stride=stride), nn.ReLU(inplace=True))
-        self.pose        = nn.Sequential(nn.Conv1d(in_channels[3], out_channels[3], kernel_size=kernel_size, padding=padding, stride=stride), nn.ReLU(inplace=True))
+        self.face        = nn.Sequential(nn.Conv1d(in_channels[0], out_channels[0], kernel_size=kernel_size,
+                                                   padding=padding, stride=stride), nn.ReLU(inplace=True))
+        self.both_hands  = nn.Sequential(nn.Conv1d(in_channels[1], out_channels[1], kernel_size=kernel_size,
+                                                   padding=padding, stride=stride), nn.ReLU(inplace=True)) 
+        self.full_frame  = nn.Sequential(nn.Conv1d(in_channels[2], out_channels[2], kernel_size=kernel_size,
+                                                   padding=padding, stride=stride), nn.ReLU(inplace=True))
+        self.pose        = nn.Sequential(nn.Conv1d(in_channels[3], out_channels[3], kernel_size=kernel_size,
+                                                   padding=padding, stride=stride), nn.ReLU(inplace=True))
         
         self.TC_1 = nn.Conv1d(sum(in_channels), sum(out_channels)//2, kernel_size=1)
         
@@ -179,18 +179,13 @@ class TMC_Block(nn.Module):
                 out_channels: list()
                     list of channels of each output from each feature cues
         """
+        super(TMC_Block, self).__init__()
         
-        self.inter_cue_path = Inter_Cue_path(in_channel=sum(in_channels),
-                                             out_channel=sum(out_channels),
-                                             kernel_size=kernel_size,
-                                             padding=padding,
-                                             stride=stride)
+        self.inter_cue_path = Inter_Cue_path(in_channel=sum(in_channels),out_channel=sum(out_channels),
+                                             kernel_size=kernel_size,padding=padding,stride=stride)
         
-        self.intra_cue_path = Intra_Cue_path(in_channels=in_channels,
-                                             out_channels=out_channels,
-                                             kernel_size=kernel_size,
-                                             padding=padding,
-                                             stride=stride)
+        self.intra_cue_path = Intra_Cue_path(in_channels=in_channels,out_channels=out_channels,
+                                             kernel_size=kernel_size,padding=padding,stride=stride)
         
     def forward(self, x_inter_cue, x_intra_cue):
         """
@@ -215,31 +210,36 @@ class TMC_Block(nn.Module):
 
 class TMC_Module(nn.Module):
     
-    def __init__(self, in_channels, out_channels, kernel_size=5, padding=2, stride=1):
+    def __init__(self, in_channels, out_channel, kernel_size=5, padding=2, stride=1):
         """
             we use two TMB block
             
             parameters:
                 in_channels : list()
                     list of channels of each feature cues
-                out_channels: list()
-                    list of channels of each output from each feature cues
+                out_channel: torch.Tensor size of 1 dimension
+                    sum of out_channels from multi cues
         """
-        self.TMC_block1 = TMC_Block(in_channels=in_channels,
-                                    out_channels=out_channels,
-                                    kernel_size=kernel_size,
-                                    padding=padding,
-                                    stride=stride)
-        self.TP1_inter = nn.MaxPool1d(kernel_size=2, stride=2)
-        self.TP1_intra = nn.MaxPool1d(kernel_size=2, stride=2)
+        super(TMC_Module, self).__init__()
         
-        self.TMC_block2 = TMC_Block(in_channels=in_channels,
-                                    out_channels=out_channels,
-                                    kernel_size=kernel_size,
-                                    padding=padding,
-                                    stride=stride)
+        # C = num of cues
+        C = len(in_channels)
+        out_channels = list()
+        tp1_intra = list()
+        tp2_intra = list()
+        for _ in range(C):
+            out_channels.append(out_channel//C)
+            tp1_intra.append(nn.MaxPool1d(kernel_size=2, stride=2))
+            tp2_intra.append(nn.MaxPool1d(kernel_size=2, stride=2))
+        self.TMC_block1 = TMC_Block(in_channels=in_channels,out_channels=out_channels,
+                                    kernel_size=kernel_size,padding=padding,stride=stride)
+        self.TP1_inter = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.TP1_intra = nn.ModuleList(tp1_intra)
+        
+        self.TMC_block2 = TMC_Block(in_channels=out_channels, out_channels=out_channels,
+                                    kernel_size=kernel_size, padding=padding, stride=stride)
         self.TP2_inter = nn.MaxPool1d(kernel_size=2, stride=2)
-        self.TP2_intra = nn.MaxPool1d(kernel_size=2, stride=2)
+        self.TP2_intra = nn.ModuleList(tp2_intra)
     
     def forward(self, x):
         """
@@ -263,11 +263,13 @@ class TMC_Module(nn.Module):
         
         inter_out1, intra_out1 = self.TMC_block1(torch.cat(x, dim=1), x)
         inter_out1 = self.TP1_inter(inter_out1)
-        intra_out1 = self.TP1_intra(intra_out1)
+        for i in range(len(intra_out1)):
+            intra_out1[i] = self.TP1_intra[i](intra_out1[i])
         
-        inter_out2, intra_out2 = self.TMC_block1(inter_out1, intra_out1)
-        inter_out2 = self.TP1_inter(inter_out2)
-        intra_out2 = self.TP1_intra(intra_out2)
+        inter_out2, intra_out2 = self.TMC_block2(inter_out1, intra_out1)
+        inter_out2 = self.TP2_inter(inter_out2)
+        for i in range(len(intra_out2)):
+            intra_out2[i] = self.TP2_intra[i](intra_out2[i])
         
         return inter_out2, intra_out2
 #------------------------------------------------------------------------------------------------------------------------------------------------------
