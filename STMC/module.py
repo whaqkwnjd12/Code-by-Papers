@@ -144,7 +144,7 @@ class Intra_Cue_path(nn.Module):
         self.pose        = nn.Sequential(nn.Conv1d(in_channels[3], out_channels[3], kernel_size=kernel_size,
                                                    padding=padding, stride=stride), nn.ReLU(inplace=True))
         
-        self.TC_1 = nn.Conv1d(sum(in_channels), sum(out_channels)//2, kernel_size=1)
+        self.TC_1 = nn.Conv1d(sum(out_channels), sum(out_channels)//2, kernel_size=1)
         
     def forward(self, x):
         """
@@ -164,7 +164,7 @@ class Intra_Cue_path(nn.Module):
         
         output = [face, both_hands, full_frame, pose]
         
-        inter_cue_input = torch.cat(output, dim=1) # size of (1 x sum(out_channels) x T)
+        inter_cue_input = self.TC_1(torch.cat(output, dim=1)) # size of (1 x sum(out_channels) x T)
         
         return output, inter_cue_input
 
@@ -231,6 +231,7 @@ class TMC_Module(nn.Module):
             out_channels.append(out_channel//C)
             tp1_intra.append(nn.MaxPool1d(kernel_size=2, stride=2))
             tp2_intra.append(nn.MaxPool1d(kernel_size=2, stride=2))
+        
         self.TMC_block1 = TMC_Block(in_channels=in_channels,out_channels=out_channels,
                                     kernel_size=kernel_size,padding=padding,stride=stride)
         self.TP1_inter = nn.MaxPool1d(kernel_size=2, stride=2)
@@ -258,10 +259,11 @@ class TMC_Module(nn.Module):
         """
         # convert size of each feature from (T x d) ==> (1 x d x T) for using nn.Conv1d and nn.MaxPool1d requiring 3 dimension input
         
-        for i in range(len(x)):
-            x[i] = x[i].unsqueeze(0).permute((0, 2, 1))
-        
-        inter_out1, intra_out1 = self.TMC_block1(torch.cat(x, dim=1), x)
+        converted_x = list()
+        for each_x in x:
+            converted_x.append(each_x.unsqueeze(0).permute((0, 2, 1)).contiguous())
+
+        inter_out1, intra_out1 = self.TMC_block1(torch.cat(converted_x, dim=1), converted_x)
         inter_out1 = self.TP1_inter(inter_out1)
         for i in range(len(intra_out1)):
             intra_out1[i] = self.TP1_intra[i](intra_out1[i])
@@ -270,6 +272,12 @@ class TMC_Module(nn.Module):
         inter_out2 = self.TP2_inter(inter_out2)
         for i in range(len(intra_out2)):
             intra_out2[i] = self.TP2_intra[i](intra_out2[i])
+        inter_out2 = inter_out2.squeeze(0).T.contiguous()
+        
+        converted_intra_out = list()
+        
+        for each_intra_out in intra_out2:
+            converted_intra_out.append(each_intra_out.squeeze(0).T.contiguous())
         
         return inter_out2, intra_out2
 #------------------------------------------------------------------------------------------------------------------------------------------------------
