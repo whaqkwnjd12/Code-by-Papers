@@ -90,13 +90,3 @@ class SMC_Module(nn.Module):
         output = [face, torch.cat([l_hand, r_hand], dim = -1), full_frame, pose]
 		
         return output
-
-
-#--------------------------------------------------------------------------------------------------------------------------------
-
-
-    
-
-
-
-
