@@ -74,6 +74,7 @@ class TMC_Module(nn.Module):
         for each_intra_out in intra_out2:
             converted_intra_out.append(each_intra_out.squeeze(0).T.contiguous())
         
+        intra_out2 = torch.cat(intra_out2, dim=1).squeeze(0).permute((1, 0))
         return inter_out2, intra_out2
 
 #------------------------------------------------------------------------------------------------------------------------------------------------------
