@@ -100,13 +100,9 @@ encoder_cfg = {
 def get_timm_block(module_name):
     if module_name not in encoder_cfg.keys():
         raise RuntimeError('Unknown model (%s)' % module_name)
-    config = timm.models.efficientnet.default_cfgs[module_name]
-    config_key = ['input_size', 'mean', 'std', 'interpolation', 'test_input_size']
-    new_config = encoder_cfg[module_name]
-    for key in config_key:
-        new_config[key] = config[key]
-    new_config["name"] = module_name
-    return new_config
+    config_info = encoder_cfg[module_name]
+    config_info["name"] = module_name
+    return config_info
 # -----------------------------------------------------------------------------------------------------------------------------------------------------
 
 # Decoder information

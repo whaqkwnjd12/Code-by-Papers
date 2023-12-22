@@ -7,7 +7,7 @@ from .config import get_timm_block
 class Unet3Plus(nn.Module):
     
 
-    def __init__(self, in_channel, cat_channel, decoder_name, n_classes, encoder_config=None,
+    def __init__(self, in_channel, cat_channel, decoder_name, n_classes, encoder_progessive_p, decoder_progressive_p,
                  encoder_block_mode = None, decoder_block_mode = None, **kwargs):
         
         super(Unet3Plus, self).__init__()
@@ -15,9 +15,10 @@ class Unet3Plus(nn.Module):
 
         # torchvision.models.resnet34, 101, vgg19, mobilenet_v2
         if encoder_block_mode is not None:
-            encoder_block_info = 
+            encoder_block_info = get_timm_block(encoder_block_mode)
         self.encoder = U3Pencoder(in_channel = in_channel,
                                   encoder_block_info = encoder_block_info,
+                                  add_p = encoder_progessive_p,
                                  **kwargs)
         
 
